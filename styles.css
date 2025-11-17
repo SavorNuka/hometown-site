@@ -17,7 +17,7 @@ img {
     position: relative;
     background-size: cover;
     background-position: 50% 51%;
-    background-image: url("images/Bethlehem_star.jpg");
+    background-image: url("Bethlehem_star.jpg");
     padding: 10px 0 40px 0;
     color: white;
 }
@@ -76,4 +76,5 @@ h3 {
         width: 300px;
         font-style: italic;
     }
+
 }
