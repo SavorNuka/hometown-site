@@ -17,7 +17,7 @@ img {
     position: relative;
     background-size: cover;
     background-position: 50% 51%;
-    background-image: url("images/Bethlehem_star.jpg") role="img" aria-label="A landscape view overlooking a valley with the Bethlehem star lit upon the crest of a hill in the horizon.";
+    background-image: url("images/Bethlehem_star.jpg");
     padding: 10px 0 40px 0;
     color: white;
 }
@@ -77,3 +77,4 @@ h3 {
         font-style: italic;
     }
 }
+
