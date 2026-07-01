@@ -50,7 +50,7 @@ interface PlanStore extends AppState {
   addPackingItem: (text: string, category: PackingCategory) => void
   togglePackingItem: (id: string) => void
   removePackingItem: (id: string) => void
-  clearPackedItems: () => void
+  clearPackedItems: (userId?: string) => void
   updatePackingItemAssignment: (id: string, assignedTo: string[]) => void
 
   // Import/export
@@ -272,8 +272,14 @@ export const usePlanStore = create<PlanStore>()(
       set((s) => ({ packingList: s.packingList.filter((item) => item.id !== id) }))
     },
 
-    clearPackedItems() {
-      set((s) => ({ packingList: s.packingList.filter((item) => !item.packed) }))
+    clearPackedItems(userId) {
+      set((s) => ({
+        packingList: s.packingList.filter((item) => {
+          if (!item.packed) return true
+          if (!userId) return false
+          return item.userId !== userId
+        }),
+      }))
     },
 
     updatePackingItemAssignment(id, assignedTo) {

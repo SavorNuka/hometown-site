@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePlanStore } from '../../stores/planStore'
 import { useAuth } from '../../hooks/useAuth'
+import { toggleNoteLike } from '../../lib/sync'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import type { Note } from '../../types'
@@ -235,7 +236,10 @@ export function NotesPage() {
                 <NoteCard
                   note={note}
                   currentUserId={user?.id}
-                  onLike={() => likeNote(note.id)}
+                  onLike={() => {
+                    likeNote(note.id)
+                    if (user) toggleNoteLike(note.id, user.id, !!note.likedByMe)
+                  }}
                   onAddReply={(t) => addReply(note.id, t, authorStamp, user?.id)}
                   onRemoveReply={(rid) => removeReply(note.id, rid)}
                   onDelete={() => removeNote(note.id)}

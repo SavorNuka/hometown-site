@@ -101,7 +101,6 @@ export interface DayPlan {
 
 export interface Plan {
   id: string
-  ownerId?: string
   name: string
   startDate: string
   endDate: string
@@ -150,6 +149,7 @@ export const PACKING_CATEGORY_EMOJI: Record<PackingCategory, string> = {
 
 export interface PackingItem {
   id: string
+  userId?: string
   text: string
   category: PackingCategory
   packed: boolean
