@@ -79,6 +79,7 @@ export interface GroceryItem {
 
 export interface Meal {
   id: string
+  userId?: string
   name: string
   notes: string
   servings: number

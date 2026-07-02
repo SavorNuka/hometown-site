@@ -39,17 +39,17 @@ function ShellInner({ children }: { children: ReactNode }) {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => { timer = null; pushNowRef.current() }, 2000)
     }
-    const unsubMeals   = usePlanStore.subscribe((s) => s.meals,       schedule)
-    const unsubPlan    = usePlanStore.subscribe((s) => s.plan,        schedule)
-    const unsubNotes   = usePlanStore.subscribe((s) => s.notes,       schedule)
-    const unsubGrocery = usePlanStore.subscribe((s) => s.groceryList, schedule)
+    const unsubMeals   = usePlanStore.subscribe((s) => s.meals, schedule)
+    const unsubPlan    = usePlanStore.subscribe((s) => s.plan, schedule)
+    const unsubNotes   = usePlanStore.subscribe((s) => s.notes, schedule)
     const unsubPacking = usePlanStore.subscribe((s) => s.packingList, schedule)
+    const unsubGrocery = usePlanStore.subscribe((s) => s.groceryList, schedule)
     return () => {
       unsubMeals()
       unsubPlan()
       unsubNotes()
-      unsubGrocery()
       unsubPacking()
+      unsubGrocery()
       if (timer) clearTimeout(timer)
     }
   }, [user])

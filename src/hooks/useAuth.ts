@@ -85,6 +85,7 @@ export function useAuth() {
       () => syncDown(user.id),
       () => syncDown(user.id),
       () => syncDown(user.id),
+      () => syncDown(user.id),
     )
     return unsub
   }, [user, syncDown, planId])
@@ -135,15 +136,16 @@ export function useAuth() {
     const mealCount = Object.keys(state.meals).length
     console.debug('[pushNow] pushing', { meals: mealCount, plan: state.plan?.id })
     const result = await pushPlan(state, user.id)
-    if (result.error) console.error('[pushNow] pushPlan error:', result.error)
+    if (result.error) {
+      console.error('[pushNow] pushPlan error:', result.error)
+      return
+    }
     await pushNotes(state.notes, user.id, state.plan?.id, displayName ?? undefined)
     if (state.plan) {
       await pushPackingList(state.packingList, state.plan.id, user.id)
     }
-    if (!result.error) {
-      console.debug('[pushNow] push succeeded, resetting dirtyAt')
-      resetDirtyAt()
-    }
+    console.debug('[pushNow] all pushes succeeded, resetting dirtyAt')
+    resetDirtyAt()
   }
 
   return { user, displayName, loading, syncing, isConfigured: isConfigured(), signIn, signUp, signOut, pushNow }
