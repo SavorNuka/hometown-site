@@ -34,20 +34,24 @@ export async function pushPlan(
     if (daysError) console.error('plan days update failed (collab)', daysError)
   }
 
-  const mealRows = Object.values(meals).map((m) => ({
-    id: m.id,
-    plan_id: plan.id,
-    user_id: userId,
-    data: m,
-    updated_at: m.updatedAt,
-    created_at: m.createdAt,
-  }))
+  // Only upsert meals this user owns — prevents overwriting owner's user_id on meal rows
+  const mealRows = Object.values(meals)
+    .filter((m) => !m.userId || m.userId === userId)
+    .map((m) => ({
+      id: m.id,
+      plan_id: plan.id,
+      user_id: userId,
+      data: m,
+      updated_at: m.updatedAt,
+      created_at: m.createdAt,
+    }))
   if (mealRows.length > 0) {
     const { error: mealError } = await supabase.from('meals').upsert(mealRows)
     if (mealError) { console.error('meal upsert failed', mealError); return { error: mealError.message } }
   }
 
-  await supabase.from('grocery_items').delete().eq('plan_id', plan.id)
+  // Scope delete to own rows — prevents wiping other collaborators' grocery data
+  await supabase.from('grocery_items').delete().eq('plan_id', plan.id).eq('user_id', userId)
   const groceryRows = groceryList.map((g) => ({
     id: crypto.randomUUID(),
     plan_id: plan.id,
@@ -122,6 +126,34 @@ export async function pushNotes(
       await deleteRepliesQuery.not('id', 'in', `(${keepReplyIds.join(',')})`)
     } else {
       await deleteRepliesQuery
+    }
+  }
+
+  // Push own replies that live on OTHER users' notes (previously skipped)
+  const otherNotes = notes.filter((n) => n.authorId && n.authorId !== userId)
+  if (otherNotes.length > 0) {
+    const otherReplyRows = otherNotes.flatMap((n) =>
+      (n.replies ?? [])
+        .filter((r) => r.authorId === userId)
+        .map((r) => ({
+          id: r.id,
+          note_id: n.id,
+          user_id: userId,
+          text: r.text,
+          created_at: r.createdAt,
+          author_name: r.authorName ?? displayName ?? null,
+        }))
+    )
+    if (otherReplyRows.length > 0) {
+      await supabase.from('note_replies').upsert(otherReplyRows, { onConflict: 'id' })
+    }
+    const otherNoteIds = otherNotes.map((n) => n.id)
+    const keepOtherIds = otherReplyRows.map((r) => r.id)
+    const deleteOtherRepliesQuery = supabase.from('note_replies').delete().eq('user_id', userId).in('note_id', otherNoteIds)
+    if (keepOtherIds.length > 0) {
+      await deleteOtherRepliesQuery.not('id', 'in', `(${keepOtherIds.join(',')})`)
+    } else {
+      await deleteOtherRepliesQuery
     }
   }
 }
@@ -271,10 +303,19 @@ export async function pullFromSupabase(
 
   const meals: AppState['meals'] = {}
   for (const row of mealsRes.data ?? []) {
-    meals[row.data.id] = row.data
+    // Attach userId so pushPlan can filter to only upsert own meals
+    meals[row.data.id] = { ...row.data, userId: row.user_id }
   }
 
-  const groceryList = (groceryRes.data ?? []).map((r: { data: GroceryItem }) => r.data)
+  // Deduplicate by inner data.id — multiple users may each store a copy after C-2 fix
+  const seenGroceryIds = new Set<string>()
+  const groceryList = (groceryRes.data ?? []).reduce<GroceryItem[]>((acc, r: { data: GroceryItem }) => {
+    if (!seenGroceryIds.has(r.data.id)) {
+      seenGroceryIds.add(r.data.id)
+      acc.push(r.data)
+    }
+    return acc
+  }, [])
 
   // Pull replies and likes for these notes in parallel
   const noteIds = (notesRes.data ?? []).map((r: { id: string }) => r.id)
@@ -399,7 +440,8 @@ export function subscribeToRealtime(
   onPlanChange: () => void,
   onMealChange: () => void,
   onGroceryChange: () => void,
-  onNoteChange: () => void
+  onNoteChange: () => void,
+  onPackingChange: () => void
 ): RealtimeUnsub {
   if (!isConfigured() || !supabase) return () => {}
 
@@ -416,6 +458,7 @@ export function subscribeToRealtime(
     .on('postgres_changes', { event: '*', schema: 'public', table: 'notes', filter: `plan_id=eq.${planId}` }, onNoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'note_replies' }, onNoteChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'note_likes' }, onNoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'packing_items', filter: `plan_id=eq.${planId}` }, onPackingChange)
     .subscribe()
 
   return () => { supabase?.removeChannel(channel) }
