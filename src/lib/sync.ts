@@ -284,7 +284,7 @@ export async function pullFromSupabase(
 
   const [mealsRes, groceryRes, notesRes] = await Promise.all([
     supabase.from('meals').select('*').eq('plan_id', planRow.id as string),
-    supabase.from('grocery_items').select('*').eq('plan_id', planRow.id as string),
+    supabase.from('grocery_items').select('*').eq('plan_id', planRow.id as string).order('created_at', { ascending: false }),
     supabase.from('notes').select('*').eq('plan_id', planRow.id as string).order('created_at', { ascending: false }),
   ])
 
