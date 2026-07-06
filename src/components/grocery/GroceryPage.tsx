@@ -7,6 +7,11 @@ import { GroceryCategoryList } from './GroceryCategoryList'
 import { EmptyState } from '../ui/EmptyState'
 import { Button } from '../ui/Button'
 
+function formatDayLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
 export function GroceryPage() {
   const plan = usePlanStore((s) => s.plan)
   const updateGroceryItemAssignment = usePlanStore((s) => s.updateGroceryItemAssignment)
@@ -16,6 +21,7 @@ export function GroceryPage() {
   const filterPerson = useUIStore((s) => s.groceryFilter)
   const setFilterPerson = useUIStore((s) => s.setGroceryFilter)
   const { displayName } = useAuth()
+  const [filterDay, setFilterDay] = useState<string | null>(null)
   const [addName, setAddName] = useState('')
   const [addQty, setAddQty] = useState('1')
   const [addUnit, setAddUnit] = useState('')
@@ -31,6 +37,18 @@ export function GroceryPage() {
     nameRef.current?.focus()
   }
 
+  // Build a date → Set<mealId> lookup; only include days that have at least one meal
+  const mealIdsByDate = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const day of plan?.days ?? []) {
+      const ids = Object.values(day.slots).map((s) => s.mealId).filter(Boolean) as string[]
+      if (ids.length > 0) map.set(day.date, new Set(ids))
+    }
+    return map
+  }, [plan?.days])
+
+  const daysWithMeals = useMemo(() => Array.from(mealIdsByDate.keys()), [mealIdsByDate])
+
   const allAssignees = useMemo(() => {
     const names = new Set<string>()
     for (const item of groceryList) {
@@ -40,10 +58,19 @@ export function GroceryPage() {
   }, [groceryList])
 
   const visibleItems = useMemo(() => {
-    if (!filterPerson) return groceryList
-    // Manual items always appear; assigned items filtered by person
-    return groceryList.filter((i) => i.manual || (i.assignedTo ?? []).includes(filterPerson))
-  }, [groceryList, filterPerson])
+    let items = groceryList
+    if (filterDay) {
+      const dayMeals = mealIdsByDate.get(filterDay) ?? new Set()
+      items = items.filter((i) =>
+        // Manual items have no mealIds — always show them
+        i.manual || i.mealIds.length === 0 || i.mealIds.some((id) => dayMeals.has(id))
+      )
+    }
+    if (filterPerson) {
+      items = items.filter((i) => i.manual || (i.assignedTo ?? []).includes(filterPerson))
+    }
+    return items
+  }, [groceryList, filterDay, filterPerson, mealIdsByDate])
 
   if (!plan) {
     return (
@@ -87,6 +114,36 @@ export function GroceryPage() {
           Refresh
         </Button>
       </div>
+
+      {/* Filter by day */}
+      {daysWithMeals.length > 1 && (
+        <div className="flex gap-2 items-center overflow-x-auto pb-0.5 no-scrollbar">
+          <span className="text-xs text-olive/50 shrink-0">Day:</span>
+          {daysWithMeals.map((date) => (
+            <button
+              key={date}
+              type="button"
+              onClick={() => setFilterDay(filterDay === date ? null : date)}
+              className={`rounded-full px-3 py-0.5 text-xs font-medium transition-colors shrink-0 ${
+                filterDay === date
+                  ? 'bg-olive text-white'
+                  : 'bg-olive/10 text-olive hover:bg-olive/20'
+              }`}
+            >
+              {formatDayLabel(date)}
+            </button>
+          ))}
+          {filterDay && (
+            <button
+              type="button"
+              onClick={() => setFilterDay(null)}
+              className="text-xs text-olive/40 hover:text-olive transition-colors shrink-0"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filter by person */}
       {allAssignees.length > 0 && (
