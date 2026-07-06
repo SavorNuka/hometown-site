@@ -116,7 +116,7 @@ export function GroceryPage() {
       </div>
 
       {/* Filter by day */}
-      {daysWithMeals.length > 1 && (
+      {daysWithMeals.length >= 1 && (
         <div className="flex gap-2 items-center overflow-x-auto pb-0.5 no-scrollbar">
           <span className="text-xs text-olive/50 shrink-0">Day:</span>
           {daysWithMeals.map((date) => (
