@@ -3,6 +3,16 @@ import type { AppState, Plan, GroceryItem, PackingCategory, PackingItem } from '
 
 type RealtimeUnsub = () => void
 
+// Produces a stable UUID for a (userId, itemId) pair so grocery rows can be
+// UPSERTed without DELETE+INSERT (which fires two Realtime events and causes
+// the UI to flicker through an intermediate empty state).
+function deterministicId(a: string, b: string): string {
+  const hex = (s: string) => s.replace(/-/g, '')
+  const n = BigInt('0x' + hex(a)) ^ BigInt('0x' + hex(b))
+  const h = n.toString(16).padStart(32, '0')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+
 // ── Push local state → Supabase ─────────────────────────────────────────────
 
 export async function pushPlan(
@@ -50,17 +60,33 @@ export async function pushPlan(
     if (mealError) { console.error('meal upsert failed', mealError); return { error: mealError.message } }
   }
 
-  // Scope delete to own rows — prevents wiping other collaborators' grocery data
-  await supabase.from('grocery_items').delete().eq('plan_id', plan.id).eq('user_id', userId)
+  // UPSERT with stable IDs (deterministicId) instead of DELETE+INSERT.
+  // DELETE+INSERT fires two Realtime events; the DELETE event causes syncDown
+  // to briefly import an empty grocery list before the INSERT arrives (flicker).
+  // Stable IDs let us UPSERT so only UPDATE events fire — no intermediate empty state.
+  // created_at is set to now() on every push so ORDER BY desc keeps the most
+  // recently pushed version winning during multi-user deduplication in pullFromSupabase.
+  const now = new Date().toISOString()
   const groceryRows = groceryList.map((g) => ({
-    id: crypto.randomUUID(),
+    id: deterministicId(userId, g.id),
     plan_id: plan.id,
     user_id: userId,
     data: g,
+    created_at: now,
   }))
   if (groceryRows.length > 0) {
-    const { error: groceryError } = await supabase.from('grocery_items').insert(groceryRows)
-    if (groceryError) console.error('grocery insert failed', groceryError)
+    const { error: groceryError } = await supabase
+      .from('grocery_items')
+      .upsert(groceryRows, { onConflict: 'id' })
+    if (groceryError) console.error('grocery upsert failed', groceryError)
+  }
+  // Remove rows for items that are no longer in the list
+  const keepIds = groceryRows.map((r) => r.id)
+  const delQuery = supabase.from('grocery_items').delete().eq('plan_id', plan.id).eq('user_id', userId)
+  if (keepIds.length > 0) {
+    await delQuery.not('id', 'in', `(${keepIds.join(',')})`)
+  } else {
+    await delQuery
   }
 
   return { error: null }
